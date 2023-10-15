@@ -4,9 +4,10 @@ import gspread
 import json
 import telebot
 from datetime import datetime
-bot = telebot.TeleBot('your telebot token from the botfather ')
-TelegramUsers = ["your telegram userid in integers "]
+bot = telebot.TeleBot('6584622284:AAFte6DgvrBK8jxj0WNMqmXlPt5sx6I5XcE')
+TelegramUsers = [6521303025, 5105886481]
 
+allow_anonymous = True;
 record_dict = {}
 months_dict = {"01": "Jan", "02": "Feb", "03": "Mar", "04": "Apr", "05": "May", "06": "Jun", "07": "Jul", "08": "Aug", "09": "Sept", "10": "Oct", "11": "Nov", "12": "Dec"}
 
@@ -15,9 +16,16 @@ scopes = [
 'https://www.googleapis.com/auth/spreadsheets',
 'https://www.googleapis.com/auth/drive'
 ]
-credentials = ServiceAccountCredentials.from_json_keyfile_name("The name of the json key you downloaded earlier.json", scopes) #access the json key you downloaded earlier 
-file = gspread.authorize(credentials) # authenticate the JSON key with gspread
-sheet = file.open('Name of your spreadsheet') # get the instance of the Spreadsheet
+credentials = ServiceAccountCredentials.from_json_keyfile_name("gspread-credentials.json", scopes) #access the json key you downloaded earlier 
+client = gspread.authorize(credentials) # authenticate the JSON key with gspread
+
+def get_user_sheet(user):
+    sample_spreadsheet = client.open('Expense Tracker');    
+    spreadsheet_name = 'Expense Tracker_{}_{} {}'.format(user.id, user.first_name, user.last_name);
+    spreadsheet_list = client.openall(spreadsheet_name);
+    spreadsheet = client.copy(sample_spreadsheet.id, spreadsheet_name, True) if spreadsheet_list == [] else spreadsheet_list[0];
+    client.insert_permission(spreadsheet.id, None, 'anyone', 'reader')
+    return spreadsheet;
 
 
 #Get today's date in integer format
@@ -30,8 +38,11 @@ def today_date():
     return a
 
 #Checks if User is Authorized or not
-def UserCheck(message):
-    if message.from_user.id in TelegramUsers:    
+def user_check(message):
+    user = message.from_user
+    if (user.id in TelegramUsers) or allow_anonymous == True:
+        record_dict["User"] = user
+        record_dict["CurrentSpreadSheet"] = get_user_sheet(user)
         return True
     else:
         bot.reply_to(message, "Unauthorized User")
@@ -41,7 +52,6 @@ def UserCheck(message):
 #determine if money in or out
 def get_inout(message):
     inout = message.text
-    print("In or Out: ",inout)
     record_dict["in or out"] = inout
 
     if inout.lower() == 'out':
@@ -50,21 +60,18 @@ def get_inout(message):
         start_markup.row('Groceries', 'Transportation', 'Personal' , 'Toiletries')
         start_markup.row('Entertainment/Social', 'Utilities', 'Travel', 'Gifts')
         sent = bot.send_message(message.chat.id, "Choose a category", reply_markup=start_markup)
-        print(message.text)
         bot.register_next_step_handler(sent,get_category)
     elif inout.lower() == 'in':
         start_markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
         start_markup.row('Salary', 'Reimbursement', 'Refund')
         start_markup.row('Parents', 'Gifts', 'Topup')
         sent = bot.send_message(message.chat.id, "Choose a category", reply_markup=start_markup)
-        print(message.text)
         bot.register_next_step_handler(sent,get_category)
 
 
 #get category data    
 def get_category(message):
     category = message.text
-    print("Category: ",category)
     record_dict["Category"] = category
 
     start_markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
@@ -80,22 +87,18 @@ def get_date(message):
     else:
         datee = message.text
         record_dict["Date"] = datee
-    print("Date: ",datee)
     sent = bot.send_message(message.chat.id,"Amount?")
     bot.register_next_step_handler(sent,get_amt)
 
 def get_amt(message):
     amt = message.text
     record_dict["Amount"]=amt
-    print(amt)
     sent = bot.send_message(message.chat.id,"Description?")
     bot.register_next_step_handler(sent,get_description)
 
 def get_description(message):
     desc = message.text
     record_dict["Description"]=desc
-    print(desc)
-    print(record_dict)
     bot.send_message(message.chat.id,"Updating...")
     update_sheet(message)
 
@@ -106,57 +109,52 @@ def month_check():
     y = ''.join(x)
     return y
 
+def get_current_month():
+    x = list(today_date())
+    x = x[-5:-3]
+    y = ''.join(x)
+    return months_dict[y];
+
 #Function to upload data to google sheets
 def upload_data(worksheet,cell):
         cell_row = cell.row + 1
         cell_col = cell.col
         cell_val = worksheet.cell(cell_row, cell_col).value
-        print(cell_val)
         while cell_val is not None:
             cell_row = cell_row + 1
             print(cell_row)
             cell_val = worksheet.cell(cell_row, cell_col).value
-        print("Row {} is None".format(cell_row))
         worksheet.update_cell(cell_row, cell_col, record_dict['Category'])
         worksheet.update_cell(cell_row,cell_col-1,record_dict['Description'])
         worksheet.update_cell(cell_row,cell_col-2,record_dict['Amount'])
         worksheet.update_cell(cell_row,cell_col-3,record_dict['Date'])
 
-@bot.message_handler(commands=['test'])
-def testtest():
-    x = list(record_dict["Date"])
-    x = x[-5:-3]
-    y = ''.join(x)
-    return y
-    
-
 def update_sheet(message):
+    user_spreadsheet = record_dict["CurrentSpreadSheet"]
     if (record_dict["in or out"]) == "Out":
-        worksheet = sheet.worksheet("Transactions") # get Transactions worksheet of the Spreadsheet
+        worksheet = user_spreadsheet.worksheet("Transactions") # get Transactions worksheet of the Spreadsheet
         cell = worksheet.find("Category out")
         upload_data(worksheet,cell)
         mthcheck = month_check()
         for x in months_dict:
             if x == mthcheck:
-                print(months_dict[x])
-                worksheet = sheet.worksheet(months_dict[x])
+                worksheet = user_spreadsheet.worksheet(months_dict[x])
                 cell = worksheet.find("Category out")
                 upload_data(worksheet,cell)
-                print("Data Uploaded to {}".format(months_dict[x]))
+                print("Data Uploaded to {} worksheet.".format(months_dict[x]))
                 break
             else:
                 continue
-        bot.send_message(message.chat.id,"Updated")       
+        bot.send_message(message.chat.id,"Updated")      
         
     elif (record_dict["in or out"]) == "In":
-        worksheet = sheet.worksheet("Transactions") # get Transactions worksheet of the Spreadsheet
+        worksheet = user_spreadsheet.worksheet("Transactions") # get Transactions worksheet of the Spreadsheet
         cell = worksheet.find("Category in")
         upload_data(worksheet,cell)
         mthcheck = month_check()
         for x in months_dict:
             if x == mthcheck:
-                print(months_dict[x])
-                worksheet = sheet.worksheet(months_dict[x])
+                worksheet = user_spreadsheet.worksheet(months_dict[x])
                 cell = worksheet.find("Category in")
                 upload_data(worksheet,cell)
                 print("Data Uploaded to {}".format(months_dict[x]))
@@ -164,29 +162,56 @@ def update_sheet(message):
             else:
                 continue
         bot.send_message(message.chat.id,"Updated")
-    
 
-    print(record_dict)
 
+def get_report():
+    if record_dict["User"] is not None:
+        report_data = {}
+        
+        month_worksheet = record_dict["CurrentSpreadSheet"].worksheet(get_current_month())
+        month_label_cell = month_worksheet.find("Total:")
+        report_data["MonthExpenses"] = month_worksheet.cell(month_label_cell.row, month_label_cell.col + 1).value
+        
+        ts_worksheet = record_dict["CurrentSpreadSheet"].worksheet('Transactions')
+        ts_label_cell = ts_worksheet.find("Total:")
+        report_data["TotalExpenses"] = ts_worksheet.cell(ts_label_cell.row, ts_label_cell.col + 1).value
+        
+        report_data["SpreadSheetURL"] =  "docs.google.com/spreadsheets/d/{}".format(record_dict["CurrentSpreadSheet"].id)
+        
+        return report_data;
+    else:
+        pass   
 
 
 
 # Handle '/start' and '/help'
 @bot.message_handler(commands=['help', 'start'])
 def send_welcome(message):
-    if UserCheck(message) == True:
+    if user_check(message) == True:
             bot.send_message(message.chat.id, "Welcome {}\nUser: {}  ".format(message.from_user.first_name,message.from_user.id))
-            bot.reply_to(message, "/start & /help to start and get commands\n/add to add record")
+            bot.reply_to(message, "/start & /help to start and get commands\n/add to add record\n/report to get your expense report")
     else:
         pass
 
 #Handle /add
 @bot.message_handler(commands=['add'])
 def add_record(message):
-    if UserCheck(message) == True:
+    if record_dict["User"] is not None:
         start_markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
         start_markup.row('In','Out')
         sent = bot.send_message(message.chat.id, "Money In or Out? ", reply_markup=start_markup)
+        bot.register_next_step_handler(sent,get_inout)
+    else:
+        pass
+    
+@bot.message_handler(commands=['report'])
+def send_report(message):
+    if record_dict["User"] is not None:
+        start_markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+        start_markup.row('View Report')
+        report_data = get_report()
+        report_message = "Current month expenses: {}\nTotal expenses: {}\nYou can view your expense report details on Google Sheets: {}".format(report_data["MonthExpenses"], report_data["TotalExpenses"], report_data["SpreadSheetURL"])
+        sent = bot.send_message(message.chat.id, report_message, reply_markup=start_markup)
         bot.register_next_step_handler(sent,get_inout)
     else:
         pass
