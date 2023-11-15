@@ -50,24 +50,12 @@ def user_check(message):
         return False
 
 #determine if money in or out
-def get_inout(message):
-    inout = message.text
-    record_dict["in or out"] = inout
-
-    if inout.lower() == 'out':
-        start_markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-        start_markup.row('Food', 'Living Essentials', 'Health/Medical')
-        start_markup.row('Groceries', 'Transportation', 'Personal' , 'Toiletries')
-        start_markup.row('Entertainment/Social', 'Utilities', 'Travel', 'Gifts')
-        sent = bot.send_message(message.chat.id, "Choose a category", reply_markup=start_markup)
-        bot.register_next_step_handler(sent,get_category)
-    elif inout.lower() == 'in':
-        start_markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-        start_markup.row('Salary', 'Reimbursement', 'Refund')
-        start_markup.row('Parents', 'Gifts', 'Topup')
-        sent = bot.send_message(message.chat.id, "Choose a category", reply_markup=start_markup)
-        bot.register_next_step_handler(sent,get_category)
-
+def start(message):
+    start_markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    start_markup.row('Ăn uống', 'Di chuyển', 'Sách vở', 'Nhà ở')
+    start_markup.row('Mua sắm online', 'Sức khoẻ' , 'Giải Trí', 'Vay mượn')
+    sent = bot.send_message(message.chat.id, "Chọn danh mục tiêu dùng", reply_markup=start_markup)
+    bot.register_next_step_handler(sent,get_category)
 
 #get category data    
 def get_category(message):
@@ -76,7 +64,7 @@ def get_category(message):
 
     start_markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
     start_markup.row('Today')
-    sent = bot.send_message(message.chat.id, "Date? (in dd/mm/yy)", reply_markup=start_markup)
+    sent = bot.send_message(message.chat.id, "Ngày chi? (in dd/mm/yy)", reply_markup=start_markup)
     bot.register_next_step_handler(sent,get_date)
 
 #get date data
@@ -87,13 +75,13 @@ def get_date(message):
     else:
         datee = message.text
         record_dict["Date"] = datee
-    sent = bot.send_message(message.chat.id,"Amount?")
+    sent = bot.send_message(message.chat.id,"Số tiền chi?")
     bot.register_next_step_handler(sent,get_amt)
 
 def get_amt(message):
     amt = message.text
     record_dict["Amount"]=amt
-    sent = bot.send_message(message.chat.id,"Description?")
+    sent = bot.send_message(message.chat.id,"Mô tả chi tiết?")
     bot.register_next_step_handler(sent,get_description)
 
 def get_description(message):
@@ -131,37 +119,20 @@ def upload_data(worksheet,cell):
 
 def update_sheet(message):
     user_spreadsheet = record_dict["CurrentSpreadSheet"]
-    if (record_dict["in or out"]) == "Out":
-        worksheet = user_spreadsheet.worksheet("Transactions") # get Transactions worksheet of the Spreadsheet
-        cell = worksheet.find("Category out")
-        upload_data(worksheet,cell)
-        mthcheck = month_check()
-        for x in months_dict:
-            if x == mthcheck:
-                worksheet = user_spreadsheet.worksheet(months_dict[x])
-                cell = worksheet.find("Category out")
-                upload_data(worksheet,cell)
-                print("Data Uploaded to {} worksheet.".format(months_dict[x]))
-                break
-            else:
-                continue
-        bot.send_message(message.chat.id,"Updated")      
-        
-    elif (record_dict["in or out"]) == "In":
-        worksheet = user_spreadsheet.worksheet("Transactions") # get Transactions worksheet of the Spreadsheet
-        cell = worksheet.find("Category in")
-        upload_data(worksheet,cell)
-        mthcheck = month_check()
-        for x in months_dict:
-            if x == mthcheck:
-                worksheet = user_spreadsheet.worksheet(months_dict[x])
-                cell = worksheet.find("Category in")
-                upload_data(worksheet,cell)
-                print("Data Uploaded to {}".format(months_dict[x]))
-                break
-            else:
-                continue
-        bot.send_message(message.chat.id,"Updated")
+    worksheet = user_spreadsheet.worksheet("Transactions") # get Transactions worksheet of the Spreadsheet
+    cell = worksheet.find("Chi tiêu")
+    upload_data(worksheet,cell)
+    mthcheck = month_check()
+    for x in months_dict:
+        if x == mthcheck:
+            worksheet = user_spreadsheet.worksheet(months_dict[x])
+            cell = worksheet.find("Chi tiêu")
+            upload_data(worksheet,cell)
+            print("Data Uploaded to {} worksheet.".format(months_dict[x]))
+            break
+        else:
+            continue
+    bot.send_message(message.chat.id,"Updated")    
 
 
 def get_report():
@@ -169,16 +140,16 @@ def get_report():
         report_data = {}
         
         month_worksheet = record_dict["CurrentSpreadSheet"].worksheet(get_current_month())
-        month_label_cell = month_worksheet.find("Total:")
+        month_label_cell = month_worksheet.find("Tổng chi:")
         report_data["MonthExpenses"] = month_worksheet.cell(month_label_cell.row, month_label_cell.col + 1).value
         
         ts_worksheet = record_dict["CurrentSpreadSheet"].worksheet('Transactions')
-        ts_label_cell = ts_worksheet.find("Total:")
+        ts_label_cell = ts_worksheet.find("Tổng chi:")
         report_data["TotalExpenses"] = ts_worksheet.cell(ts_label_cell.row, ts_label_cell.col + 1).value
         
         report_data["SpreadSheetURL"] =  "docs.google.com/spreadsheets/d/{}".format(record_dict["CurrentSpreadSheet"].id)
         
-        return report_data;
+        return report_data
     else:
         pass   
 
@@ -197,10 +168,8 @@ def send_welcome(message):
 @bot.message_handler(commands=['add'])
 def add_record(message):
     if record_dict["User"] is not None:
-        start_markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-        start_markup.row('In','Out')
-        sent = bot.send_message(message.chat.id, "Money In or Out? ", reply_markup=start_markup)
-        bot.register_next_step_handler(sent,get_inout)
+        sent = bot.send_message(message.chat.id)
+        bot.register_next_step_handler(sent,start)
     else:
         pass
     
@@ -212,7 +181,7 @@ def send_report(message):
         report_data = get_report()
         report_message = "Current month expenses: {}\nTotal expenses: {}\nYou can view your expense report details on Google Sheets: {}".format(report_data["MonthExpenses"], report_data["TotalExpenses"], report_data["SpreadSheetURL"])
         sent = bot.send_message(message.chat.id, report_message, reply_markup=start_markup)
-        bot.register_next_step_handler(sent,get_inout)
+        bot.register_next_step_handler(sent,start)
     else:
         pass
     
